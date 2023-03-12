@@ -9,6 +9,35 @@ import xarray as xr
 import rioxarray
 import datetime
 import numpy as np
+import pandas as pd
+import geopandas as gpd
+import rasterio as rio
+import rasterio.plot as rioplt
+from rasterio.mask import mask
+from rasterio.warp import calculate_default_transform, reproject, Resampling
+
+def open_parse_geotiffs(files):
+    '''Given a list of filepaths to GeoTiff images, opens, parses timestamps from the filenames, appends to list'''
+    timestamps_UTC = []
+    dataarrays = []
+    
+    for file in files:
+        # get timestamp from filename
+        datetimelist = file.split("\\")[-1].split("_")[-1].split(".")[0].replace("T","-").split("-")
+        #print('parsing: ', datetimelist)
+        y = int(datetimelist[0])
+        mo = int(datetimelist[1])
+        d = int(datetimelist[2])
+        h = int(datetimelist[3][:2])
+        m = int(datetimelist[3][2:4])
+        s = int(datetimelist[3][4:])
+        timestamps_UTC.append(pd.Timestamp(y, mo, d, h, m, s))
+        #print(airborne_ir_timestamp_UTC)
+        
+        # open file
+        dataarrays.append(rioxarray.open_rasterio(file))
+        
+    return timestamps_UTC, dataarrays
 
 def ir_mat2dataset(mat_filepath):
     ''' Given a filepath to an airborne IR mosaic .mat file, converts to an xarray dataset.'''
@@ -46,10 +75,7 @@ def ir_mat2dataset(mat_filepath):
             attrs = {'example_attr': 'this is a global attribute'}
         )
     
-    # set coordinate system
-    ds.rio.set_spatial_dims('y', 'x', inplace=True)
-    ds.rio.write_crs("epsg:32613", inplace=True) # UTM Zone 13N
-    
+   
     # convert matlab time to python datetime (UTC)
     M = ds.time.values
     base_date = datetime.datetime(1970,1,1,0,0,0)
@@ -57,6 +83,10 @@ def ir_mat2dataset(mat_filepath):
     for time in M:
         return_matrix.append(base_date + datetime.timedelta(seconds=time))
     ds['time'] = return_matrix
+    
+    # set coordinate system
+    ds.rio.set_spatial_dims('y', 'x', inplace=True)
+    ds.rio.write_crs("epsg:32613", inplace=True) # UTM Zone 13N
     
     return ds
 
@@ -113,9 +143,6 @@ def eo_mat2dataset(mat_filepath):
             attrs = {'description': 'Airborne visible imagery from University of Washington Applied Physics Lab Compact Airborne System for Imaging the Environment instrument. Imagery of Grand Mesa, Colorado from SnowEx 2020 field campaign.'}
         )
     
-    # set coordinate system
-    ds.rio.set_spatial_dims('y', 'x', inplace=True)
-    ds.rio.write_crs("epsg:26913", inplace=True) # UTM Zone 13N / NAD83
     
     # convert matlab time to python datetime (UTC)
     M = ds.time.values
@@ -125,4 +152,62 @@ def eo_mat2dataset(mat_filepath):
         return_matrix.append(base_date + datetime.timedelta(seconds=time))
     ds['time'] = return_matrix
     
+    # set coordinate system
+    ds.rio.set_spatial_dims('y', 'x', inplace=True)
+    ds.rio.write_crs("epsg:32613", inplace=True) # UTM Zone 13N / NAD83
+    
     return ds
+
+def ir_zonal_stats(ir_filepath, shapefile_filepath, shapefile_number, return_masked_array=False):
+    '''Calculate zonal statistics for an ASTER TIR geotiff image within a single polygon from a shapefile.'''
+    with rio.open(ir_filepath) as src:
+        
+        # Open the shapefile
+        zone_shape = gpd.read_file(shapefile_filepath)
+
+        # Make sure our shapefile is the same CRS as the IR image
+        zone_shape = zone_shape.to_crs(src.crs)
+        
+        # Mask the IR image to the area of the shapefile
+        try:
+            masked_ir, mask_transform = mask(dataset=src, 
+                                            shapes=zone_shape.geometry[shapefile_number],
+                                            crop=True,
+                                            all_touched=True,
+                                            filled=True)
+        # Note that we still have a "bands" axis (of size 1) even though there's only one band, we can remove it below
+        except ValueError as e: 
+            # ValueError when shape doesn't overlap raster
+            print(e)
+            return
+        
+        # change data type to float64 so we can fill in any values =0 with NaN values
+        masked_ir = masked_ir.astype('float64')
+        masked_ir[masked_ir==0] = np.nan
+                
+        
+        # Remove the extra dimension (bands, we only have one band here)
+        masked_ir_tb = masked_ir.squeeze()
+        # Get all pixel values in our masked area
+        values = masked_ir_tb[0,:,:].flatten() # flatten to 1-D
+        values = values[~np.isnan(values)] # remove NaN pixel values
+        
+        # Calculate zonal statistics for this area (mean, max, min, std:)
+        try:
+            masked_ir_tb_mean = values.mean()
+            masked_ir_tb_max = values.max()
+            masked_ir_tb_min = values.min()
+            masked_ir_tb_std = values.std()
+        except ValueError as e:
+            # ValueError when the shapefile is empty I think
+            print(e)
+            return
+        
+        if len(values) == 0:
+            print('No valid pixels within shapefile bounds')
+            return None
+        
+        if return_masked_array == True:
+            return masked_ir_tb_mean, masked_ir_tb_max, masked_ir_tb_min, masked_ir_tb_std, masked_ir_tb
+        else:
+            return masked_ir_tb_mean, masked_ir_tb_max, masked_ir_tb_min, masked_ir_tb_std
