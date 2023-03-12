@@ -164,10 +164,9 @@ def ir_zonal_stats(ir_filepath, shapefile_filepath, shapefile_number, return_mas
         
         # Open the shapefile
         zone_shape = gpd.read_file(shapefile_filepath)
-
         # Make sure our shapefile is the same CRS as the IR image
         zone_shape = zone_shape.to_crs(src.crs)
-        
+
         # Mask the IR image to the area of the shapefile
         try:
             masked_ir, mask_transform = mask(dataset=src, 
@@ -178,6 +177,7 @@ def ir_zonal_stats(ir_filepath, shapefile_filepath, shapefile_number, return_mas
         # Note that we still have a "bands" axis (of size 1) even though there's only one band, we can remove it below
         except ValueError as e: 
             # ValueError when shape doesn't overlap raster
+            print('ValueError at masking')
             print(e)
             return
         
@@ -185,29 +185,35 @@ def ir_zonal_stats(ir_filepath, shapefile_filepath, shapefile_number, return_mas
         masked_ir = masked_ir.astype('float64')
         masked_ir[masked_ir==0] = np.nan
                 
-        
         # Remove the extra dimension (bands, we only have one band here)
         masked_ir_tb = masked_ir.squeeze()
         # Get all pixel values in our masked area
-        values = masked_ir_tb[0,:,:].flatten() # flatten to 1-D
+        values = masked_ir_tb[0,:,:].flatten() # flatten to 1-D, select IR image only (not DEM which is [1,:,:])
         values = values[~np.isnan(values)] # remove NaN pixel values
         
-        # Calculate zonal statistics for this area (mean, max, min, std:)
-        try:
+        if len(values) == 0:
+            print('No valid pixels within shapefile bounds, cannot compute stats, returning nans')
+            masked_ir_tb_mean = np.nan
+            masked_ir_tb_max = np.nan
+            masked_ir_tb_min = np.nan
+            masked_ir_tb_std = np.nan
+            masked_ir_tb_n = len(values)
+            masked_ir_tb = np.nan
+        else:
+            # Calculate zonal statistics for this area (mean, max, min, std:)
+            #try:
             masked_ir_tb_mean = values.mean()
             masked_ir_tb_max = values.max()
             masked_ir_tb_min = values.min()
             masked_ir_tb_std = values.std()
-        except ValueError as e:
-            # ValueError when the shapefile is empty I think
-            print(e)
-            return
+            masked_ir_tb_n = len(values)
+            #except ValueError as e:
+            #    # ValueError when the shapefile is empty I think
+            #    print(e)
+            #    return
         
-        if len(values) == 0:
-            print('No valid pixels within shapefile bounds')
-            return None
         
         if return_masked_array == True:
-            return masked_ir_tb_mean, masked_ir_tb_max, masked_ir_tb_min, masked_ir_tb_std, masked_ir_tb
+            return masked_ir_tb_mean, masked_ir_tb_max, masked_ir_tb_min, masked_ir_tb_std, masked_ir_tb_n, masked_ir_tb
         else:
-            return masked_ir_tb_mean, masked_ir_tb_max, masked_ir_tb_min, masked_ir_tb_std
+            return masked_ir_tb_mean, masked_ir_tb_max, masked_ir_tb_min, masked_ir_tb_std, masked_ir_tb_n
