@@ -1,5 +1,7 @@
 ### Analysis of SnowEx 2020 snow surface temperature datasets 
 
+[![DOI](https://zenodo.org/badge/304765050.svg)](https://zenodo.org/badge/latestdoi/304765050)
+
 The 2020 NASA SnowEx field campaign intensive observation period took place in early February 2020 at Grand Mesa in western Colorado. As part of the field campaign, a suite of snow surface temperature observations were made at a range of spatial and temporal scales to evaluate infrared imagery from GOES-R ABI. This repository contains jupyter notebooks used to analyze some of these datasets, looking particularly at observations from two cloud-free daytime periods on 8 and 11 February 2020.
 
 ### Data
