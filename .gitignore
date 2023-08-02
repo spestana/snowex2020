@@ -1,0 +1,30 @@
+# Plot images
+*.jpg
+*.png
+*.svg
+*.gif
+
+# data and other files
+*.xml
+*.nc
+*.csv
+*.zip
+*.pdf
+*.lnk
+*.tif
+*.xcf
+
+# shapefiles
+*.shp
+*.qpj
+*.prj
+*.shx
+*.dbf
+*.cpg
+
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
