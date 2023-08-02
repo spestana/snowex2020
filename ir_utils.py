@@ -217,3 +217,4 @@ def ir_zonal_stats(ir_filepath, shapefile_filepath, shapefile_number, return_mas
             return masked_ir_tb_mean, masked_ir_tb_max, masked_ir_tb_min, masked_ir_tb_std, masked_ir_tb_n, masked_ir_tb
         else:
             return masked_ir_tb_mean, masked_ir_tb_max, masked_ir_tb_min, masked_ir_tb_std, masked_ir_tb_n
+        
